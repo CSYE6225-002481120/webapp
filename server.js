@@ -1,9 +1,12 @@
 import express from 'express';
-import { Sequelize } from 'sequelize';
+import { Sequelize, DataTypes } from 'sequelize';
 import dotenv from 'dotenv';
-import { DataTypes } from 'sequelize';
 import { v4 as uuidv4 } from 'uuid';
+// import { v4 as UUIDV4 } from 'uuid';
 import basicAuth from 'basic-auth';
+import moment from 'moment-timezone';
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -15,12 +18,12 @@ app.use((req, res, next) => {
 });
 app.disable('x-powered-by');
 
-dotenv.config();
 
 const sequelize = new Sequelize(process.env.DB_name, process.env.DB_username, process.env.DB_password, {
   host: process.env.DB_host,
-  dialect: 'mysql'
+  dialect: 'mysql',
 });
+
 
 const User = sequelize.define('User', {
   id: {
@@ -28,12 +31,13 @@ const User = sequelize.define('User', {
     defaultValue: DataTypes.UUIDV4,
     allowNull: false,
     unique: true,
-    primaryKey: true
+    primaryKey: true,
   },
+  
   email: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true
+    unique: true,
   },
   password: {
     type: DataTypes.STRING,
@@ -53,19 +57,16 @@ const User = sequelize.define('User', {
   },
   account_updated: {
     type: DataTypes.DATE,
-    allowNull: true,
+    defaultValue: DataTypes.NOW,
   },
 }, {
   timestamps: false,
 });
 
-User.beforeUpdate((user) => {
-  user.account_updated = new Date();
-});
+// User.beforeUpdate((user) => {
+//   user.account_updated = moment().tz('America/New_York').toDate();;
+// });
 
-if (process.argv[2]) {
-  process.env.PORT = process.argv[2];
-}
 
 app.all('/healthz', (req, res, next) => {
   if (req.method !== 'GET') {
@@ -79,7 +80,6 @@ app.get('/healthz', async (req, res) => {
     if (Object.keys(req.query).length > 0) {
       return res.status(400).end();
     }
-
     if (req.get('Content-Length') && parseInt(req.get('Content-Length')) > 0) {
       return res.status(400).end();
     }
@@ -90,48 +90,72 @@ app.get('/healthz', async (req, res) => {
   }
 });
 
+
 const authenticate = async (req, res, next) => {
   try {
-  const AuthorizationHeader = req.get('Authorization');
-  if (!AuthorizationHeader) {
-    return res.status(400).end();
+    const AuthorizationHeader = req.get('Authorization');
+    if (!AuthorizationHeader) {
+      return res.status(401).end();
+    }
+
+    let id = AuthorizationHeader.trim();
+    const id_base_64 = Buffer.from(id + ':').toString('base64');
+    req.headers['authorization'] = `Basic ${id_base_64}`;
+    const creds = basicAuth(req);
+
+    if (!creds || !creds.name) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    const user = await User.findOne({ where: { id: creds.name } });
+    if (!user) {
+      return res.status(403).json({ message: 'User not found or invalid ID' });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Error in authentication middleware:', error);
+    return res.status(500).json({ message: 'Internal Server Error' });
   }
-  let id = AuthorizationHeader.trim();
-  const id_base_64 = Buffer.from(id + ':').toString('base64');
-  req.headers['authorization'] = `Basic ${id_base_64}`;
-  const creds = basicAuth(req);
-  if (!creds || !creds.name) {
-    return res.status(400).end();
-  }
-  const user = await User.findOne({ where: { id: creds.name } });
-  if (!user) {
-    return res.status(403).end();
-  }
-  req.user = user;
-  next();
-} catch(error) {
-  console.log(error);
-}
 };
 
-// User creation for POST
+app.all('/v1/user/self', (req, res, next)=> {
+ // console.log("inside all self" + " " + req.method);
+  if(req.method === 'HEAD' || req.method == 'OPTIONS' || req.method === 'PATCH') {
+    //console.log('inside if')
+    return res.status(405).end();
+  }
+  next();
+})
 app.post('/v1/user', async (req, res) => {
   try {
     const { email, password, firstName, lastName } = req.body;
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).end();
+      return res.status(400).json({ message: 'User already exists' });
     }
     const newUser = await User.create({ email, password, firstName, lastName });
-    res.status(201).json({
-      message: 'User created',
-      user: newUser,
+    const createtime = moment(newUser.account_created).tz('America/New_York').format();
+    const updatetime = moment(newUser.account_updated).tz('America/New_York').format();
+    return res.status(201).json({
+        description:"User created successfully",
+        id: newUser.id,
+        firstName: newUser.firstName,
+        lastName: newUser.lastName,
+        email: newUser.email,
+        account_created: createtime,
+        account_updated: updatetime
+      
     });
   } catch (error) {
     console.log(error);
-    res.status(400).end();
+    return res.status(500).json({ 
+      message: 'Error creating user' 
+    });
   }
 });
+
 
 app.put('/v1/user/self', authenticate, async (req, res) => {
   try {
@@ -145,16 +169,38 @@ app.put('/v1/user/self', authenticate, async (req, res) => {
     if (req.body.password) {
       user.password = req.body.password;
     }
+    user.account_updated = moment().tz('America/New_York').toDate();
     await user.save();
     return res.status(204).end();
   } catch (error) {
     console.log(error);
-    res.status(400).end();
+    return res.status(500).json({ message: 'Error updating user' });
   }
 });
-app.get('/v1/user/self', authenticate, async(req, res)=>{
-  
+
+app.delete('/v1/user/self', (req, res)=>{
+  return res.status(405).end();
 })
+
+app.get('/v1/user/self', authenticate, async (req, res) => {
+  try {
+    const user = req.user;
+    const createtime = moment(user.account_created).tz('America/New_York').format();
+    const updatetime = moment(user.account_updated).tz('America/New_York').format();
+    return res.status(200).json({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      account_created: createtime,
+      account_updated: updatetime,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: 'Error fetching user information' });
+  }
+});
+
 
 (async () => {
   try {
