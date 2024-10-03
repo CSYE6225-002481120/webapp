@@ -28,7 +28,23 @@ curl -vvvv -X GET -H "Content-Type: application/json" -d '{"key":"value"}' http:
 curl -vvvv -X PUT http://localhost:5002/healthz -H "Content-Type: application/json" -d '{"key":"value"}' to send payload using another request method 
 curl -vvvv "http://localhost:3000/healthz?param=value" GET method with query parameters 
 
+--------------------------------------------------------------------------------------------------------------
+for the second part of it we added POST , GET, PUT methods for user creation 
 
+Post method for /v1/user part
+using POST method a user is created by sending his information like firstname, lastname, password and email
+the email should be unique and used as username for autenticated end points (GET, PUT) 
+the password is encrypted using Bcrypt with salt for security 
+validations are added to make sure that information is correct and not tampered 
 
+GET method is an auntenticated end point for /v1/user/self which authorises user based upon their username and password by using basic auth and returns the user information if found 
+
+PUT method is also an auntenticated end point for /v1/user/self which authorises user based upon their username and password using basicAuth and updates user information by replacing the information existing by the new information provided validations are added to check if the new information is in proper way
+
+other methods are not allowed to /v1/user/self
+
+the application will run on ubuntu server by digital ocean
+
+testing is done by using chai, moka framework and supertest which tests all potential test cases 
 
 
