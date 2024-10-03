@@ -2,10 +2,10 @@ import express from 'express';
 import { Sequelize, DataTypes } from 'sequelize';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-// import { v4 as UUIDV4 } from 'uuid';
 import basicAuth from 'basic-auth';
 import moment from 'moment-timezone';
-
+import bcrypt from 'bcrypt';  
+//seo
 dotenv.config();
 
 const app = express();
@@ -36,20 +36,20 @@ const User = sequelize.define('User', {
   
   email: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
     unique: true,
   },
   password: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
   firstName: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
   lastName: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
   },
   account_created: {
     type: DataTypes.DATE,
@@ -62,11 +62,6 @@ const User = sequelize.define('User', {
 }, {
   timestamps: false,
 });
-
-// User.beforeUpdate((user) => {
-//   user.account_updated = moment().tz('America/New_York').toDate();;
-// });
-
 
 app.all('/healthz', (req, res, next) => {
   if (req.method !== 'GET') {
@@ -98,27 +93,38 @@ const authenticate = async (req, res, next) => {
       return res.status(401).end();
     }
 
-    let id = AuthorizationHeader.trim();
-    const id_base_64 = Buffer.from(id + ':').toString('base64');
-    req.headers['authorization'] = `Basic ${id_base_64}`;
-    const creds = basicAuth(req);
-
-    if (!creds || !creds.name) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    const [email, password] = AuthorizationHeader.split(':');
+    if (!email || !password) {
+      return res.status(401).json({ message: 'Invalid credentials format. Use email:password' });
     }
 
-    const user = await User.findOne({ where: { id: creds.name } });
+    const credsBase64 = Buffer.from(`${email}:${password}`).toString('base64');
+    req.headers['authorization'] = `Basic ${credsBase64}`;
+    const creds = basicAuth(req);
+
+    if (!creds || !creds.name || !creds.pass) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const user = await User.findOne({ where: { email: creds.name } });
     if (!user) {
-      return res.status(403).json({ message: 'User not found or invalid ID' });
+      return res.status(400).json({ message: 'User not found' });
+    }
+
+    const passwordMatch = await bcrypt.compare(creds.pass, user.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     req.user = user;
     next();
   } catch (error) {
     console.error('Error in authentication middleware:', error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    return res.status(500).end();
   }
 };
+
+
 
 app.all('/v1/user/self', (req, res, next)=> {
  // console.log("inside all self" + " " + req.method);
@@ -130,12 +136,42 @@ app.all('/v1/user/self', (req, res, next)=> {
 })
 app.post('/v1/user', async (req, res) => {
   try {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).send('Request body is empty');
+    }
     const { email, password, firstName, lastName } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if(!req.body.firstName || firstName ==="" || firstName === " ") {
+      return res.status(400).json({ message: 'Firstname cannot be empty' });
+    }
+    // if(firstName.includes(" ")) {
+    //   return res.status(400).json({ message: 'Firstname cannot have space' });
+    // }
+    if(lastName.includes(" ")) {
+      return res.status(400).json({ message: 'Lastname cannot have space' });
+    }
+    if(!req.body.lastName || lastName === " " || lastName === "") {
+      return res.status(400).json({ message: 'Lastname cannot be empty' });
+    }
+    if(password === "") {
+      return res.status(400).json({ message: 'Password cannot be empty' });
+    }
+    if(password.includes(" ")) {
+      return res.status(400).json({ message: 'Password cannot have space' });
+    }
+    if(password.length < 8) {
+      return res.status(400).json({ message: 'password should be atleast 8 characters' });
+    }
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+    
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
-    const newUser = await User.create({ email, password, firstName, lastName });
+    const encrypted_password = await bcrypt.hash(password, 10);
+    const newUser = await User.create({ email, password:encrypted_password, firstName, lastName });
     const createtime = moment(newUser.account_created).tz('America/New_York').format();
     const updatetime = moment(newUser.account_updated).tz('America/New_York').format();
     return res.status(201).json({
@@ -146,7 +182,6 @@ app.post('/v1/user', async (req, res) => {
         email: newUser.email,
         account_created: createtime,
         account_updated: updatetime
-      
     });
   } catch (error) {
     console.log(error);
@@ -160,14 +195,42 @@ app.post('/v1/user', async (req, res) => {
 app.put('/v1/user/self', authenticate, async (req, res) => {
   try {
     const user = req.user;
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).send('Request body is empty');
+    }
+
+    if(req.body.email || req.body.account_created || req.body.account_updated || req.body.id) {
+      return res.status(400).end();
+    }
+  
     if (req.body.firstName) {
+      console.log(req.body.firstName);
+      if(req.body.firstName.length === 0 || req.body.firstName === " ") {
+        return res.status(400).json({ message: 'Firstname cannot be empty' });
+      }
       user.firstName = req.body.firstName;
     }
     if (req.body.lastName) {
+      if(req.body.lastName.includes(" ")) {
+        return res.status(400).json({ message: 'Lastname cannot have space' });
+      }
+      if(req.body.lastName === " " || req.body.lastName === "") {
+        return res.status(400).json({ message: 'Lastname cannot be empty' });
+      }
       user.lastName = req.body.lastName;
     }
     if (req.body.password) {
-      user.password = req.body.password;
+      if(req.body.password === "") {
+        return res.status(400).json({ message: 'Password cannot be empty' });
+      }
+      if(req.body.password.includes(" ")) {
+        return res.status(400).json({ message: 'Password cannot have space' });
+      }
+      if(req.body.password.length < 8) {
+        return res.status(400).json({ message: 'password should be atleast 8 characters' });
+      }
+      const encrypted_password = await bcrypt.hash(req.body.password, 10);
+      user.password = encrypted_password;
     }
     user.account_updated = moment().tz('America/New_York').toDate();
     await user.save();
@@ -211,7 +274,7 @@ app.get('/v1/user/self', authenticate, async (req, res) => {
 
     port.on('error', (e) => {
       if (e.code === 'EADDRINUSE') {
-        app.listen(process.env.DEFAULT_PORT, () => {
+        app.listen(process.env.DEFAULT_PORT,  '0.0.0.0',() => {
           console.log("Server running on port: " + process.env.DEFAULT_PORT);
         });
       } else {
@@ -222,3 +285,5 @@ app.get('/v1/user/self', authenticate, async (req, res) => {
     console.error('Error synchronizing the database:', error);
   }
 })();
+
+export  {app, sequelize, User};
