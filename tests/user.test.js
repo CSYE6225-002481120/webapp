@@ -60,14 +60,14 @@ describe('User Routes - POST /v1/user', () => {
   });
 
   // Unit Test - Empty Request Body
-  it('should return 400 if request body is empty', async () => {
+  it('should return 422 if request body is empty', async () => {
     const response = await request(app).post('/v1/user').send({});
-    expect(response.status).to.equal(400);
+    expect(response.status).to.equal(422);
     expect(response.text).to.equal('Request body is empty');
   });
 
   // Unit Test - Invalid Email Format
-  it('should return 400 for invalid email format', async () => {
+  it('should return 422 for invalid email format', async () => {
     const response = await request(app)
       .post('/v1/user')
       .send({
@@ -76,12 +76,12 @@ describe('User Routes - POST /v1/user', () => {
         firstName: 'John',
         lastName: 'Doe',
       });
-    expect(response.status).to.equal(400);
+    expect(response.status).to.equal(422);
     expect(response.body).to.have.property('message', 'Invalid email format');
   });
 
   // Unit Test - Password Less Than 8 Characters
-  it('should return 400 for password less than 8 characters', async () => {
+  it('should return 422 for password less than 8 characters', async () => {
     const response = await request(app)
       .post('/v1/user')
       .send({
@@ -91,7 +91,7 @@ describe('User Routes - POST /v1/user', () => {
         lastName: 'Doe',
       });
 
-    expect(response.status).to.equal(400);
+    expect(response.status).to.equal(422);
     expect(response.body).to.have.property('message', 'password should be atleast 8 characters');
   });
 });
@@ -157,12 +157,12 @@ it('should return 200 and the user details if email and password are correct', a
     });
   
     // Test Case 5: Check for invalid email (user not found)
-    it('should return 403 if the email is not found in the database', async () => {
+    it('should return 404 if the email is not found in the database', async () => {
       const response = await request(app)
         .get('/v1/user/self')
         .set('Authorization', 'WrongEmail:Password123'); 
   
-      expect(response.status).to.equal(400);
+      expect(response.status).to.equal(404);
       expect(response.body).to.have.property('message', 'User not found');
     });
   });
@@ -185,26 +185,26 @@ it('should return 200 and the user details if email and password are correct', a
     });
   
     // Test Case 1: Check for empty request body
-    it('should return 400 if the request body is empty', async () => {
+    it('should return 422 if the request body is empty', async () => {
       const response = await request(app)
         .put('/v1/user/self')
         .set('Authorization', 'user@example.com:Password123') 
         .send({});  
   
-      expect(response.status).to.equal(400);
+      expect(response.status).to.equal(422);
       expect(response.text).to.equal('Request body is empty');
     });
   
   
   
     // Test Case 3: Lastname cannot have spaces
-    it('should return 400 if lastName has spaces', async () => {
+    it('should return 422 if lastName has spaces', async () => {
       const response = await request(app)
         .put('/v1/user/self')
         .set('Authorization', 'user@example.com:Password123')
         .send({ lastName: 'Doe Smith' });
   
-      expect(response.status).to.equal(400);
+      expect(response.status).to.equal(422);
       expect(response.body).to.have.property('message', 'Lastname cannot have space');
     });
   
@@ -212,24 +212,24 @@ it('should return 200 and the user details if email and password are correct', a
   
   
     // Test Case 6: Password cannot contain spaces
-    it('should return 400 if password contains spaces', async () => {
+    it('should return 422 if password contains spaces', async () => {
       const response = await request(app)
         .put('/v1/user/self')
         .set('Authorization', 'user@example.com:Password123')
         .send({ password: 'Pass word123' });
   
-      expect(response.status).to.equal(400);
+      expect(response.status).to.equal(422);
       expect(response.body).to.have.property('message', 'Password cannot have space');
     });
   
    
-    it('should return 400 if password is less than 8 characters', async () => {
+    it('should return 422 if password is less than 8 characters', async () => {
       const response = await request(app)
         .put('/v1/user/self')
         .set('Authorization', 'user@example.com:Password123')
         .send({ password: 'Pass12' });
   
-      expect(response.status).to.equal(400);
+      expect(response.status).to.equal(422);
       expect(response.body).to.have.property('message', 'password should be atleast 8 characters');
     });
   

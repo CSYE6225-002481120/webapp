@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import basicAuth from 'basic-auth';
 import moment from 'moment-timezone';
 import bcrypt from 'bcrypt';  
-//seo
+
 dotenv.config();
 
 const app = express();
@@ -108,7 +108,7 @@ const authenticate = async (req, res, next) => {
 
     const user = await User.findOne({ where: { email: creds.name } });
     if (!user) {
-      return res.status(400).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found' });
     }
 
     const passwordMatch = await bcrypt.compare(creds.pass, user.password);
@@ -137,33 +137,33 @@ app.all('/v1/user/self', (req, res, next)=> {
 app.post('/v1/user', async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).send('Request body is empty');
+      return res.status(422).send('Request body is empty');
     }
     const { email, password, firstName, lastName } = req.body;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if(!req.body.firstName || firstName ==="" || firstName === " ") {
-      return res.status(400).json({ message: 'Firstname cannot be empty' });
+      return res.status(422).json({ message: 'Firstname cannot be empty' });
     }
     // if(firstName.includes(" ")) {
     //   return res.status(400).json({ message: 'Firstname cannot have space' });
     // }
     if(lastName.includes(" ")) {
-      return res.status(400).json({ message: 'Lastname cannot have space' });
+      return res.status(422).json({ message: 'Lastname cannot have space' });
     }
     if(!req.body.lastName || lastName === " " || lastName === "") {
-      return res.status(400).json({ message: 'Lastname cannot be empty' });
+      return res.status(422).json({ message: 'Lastname cannot be empty' });
     }
     if(password === "") {
-      return res.status(400).json({ message: 'Password cannot be empty' });
+      return res.status(422).json({ message: 'Password cannot be empty' });
     }
     if(password.includes(" ")) {
-      return res.status(400).json({ message: 'Password cannot have space' });
+      return res.status(422).json({ message: 'Password cannot have space' });
     }
     if(password.length < 8) {
-      return res.status(400).json({ message: 'password should be atleast 8 characters' });
+      return res.status(422).json({ message: 'password should be atleast 8 characters' });
     }
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
+      return res.status(422).json({ message: 'Invalid email format' });
     }
     
     const existingUser = await User.findOne({ where: { email } });
@@ -196,7 +196,7 @@ app.put('/v1/user/self', authenticate, async (req, res) => {
   try {
     const user = req.user;
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).send('Request body is empty');
+      return res.status(422).send('Request body is empty');
     }
 
     if(req.body.email || req.body.account_created || req.body.account_updated || req.body.id) {
@@ -206,28 +206,28 @@ app.put('/v1/user/self', authenticate, async (req, res) => {
     if (req.body.firstName) {
       console.log(req.body.firstName);
       if(req.body.firstName.length === 0 || req.body.firstName === " ") {
-        return res.status(400).json({ message: 'Firstname cannot be empty' });
+        return res.status(422).json({ message: 'Firstname cannot be empty' });
       }
       user.firstName = req.body.firstName;
     }
     if (req.body.lastName) {
       if(req.body.lastName.includes(" ")) {
-        return res.status(400).json({ message: 'Lastname cannot have space' });
+        return res.status(422).json({ message: 'Lastname cannot have space' });
       }
       if(req.body.lastName === " " || req.body.lastName === "") {
-        return res.status(400).json({ message: 'Lastname cannot be empty' });
+        return res.status(422).json({ message: 'Lastname cannot be empty' });
       }
       user.lastName = req.body.lastName;
     }
     if (req.body.password) {
       if(req.body.password === "") {
-        return res.status(400).json({ message: 'Password cannot be empty' });
+        return res.status(422).json({ message: 'Password cannot be empty' });
       }
       if(req.body.password.includes(" ")) {
-        return res.status(400).json({ message: 'Password cannot have space' });
+        return res.status(422).json({ message: 'Password cannot have space' });
       }
       if(req.body.password.length < 8) {
-        return res.status(400).json({ message: 'password should be atleast 8 characters' });
+        return res.status(422).json({ message: 'password should be atleast 8 characters' });
       }
       const encrypted_password = await bcrypt.hash(req.body.password, 10);
       user.password = encrypted_password;
@@ -247,6 +247,12 @@ app.delete('/v1/user/self', (req, res)=>{
 
 app.get('/v1/user/self', authenticate, async (req, res) => {
   try {
+    if (Object.keys(req.query).length > 0) {
+      return res.status(400).end();
+    }
+    if (req.get('Content-Length') && parseInt(req.get('Content-Length')) > 0) {
+      return res.status(400).end();
+    }
     const user = req.user;
     const createtime = moment(user.account_created).tz('America/New_York').format();
     const updatetime = moment(user.account_updated).tz('America/New_York').format();
@@ -272,7 +278,6 @@ app.get('/v1/user/self', authenticate, async (req, res) => {
       console.log('Server running on port: ' + process.env.PORT);
     });
 
-    
     port.on('error', (e) => {
       if (e.code === 'EADDRINUSE') {
         app.listen(process.env.DEFAULT_PORT,  '0.0.0.0',() => {
