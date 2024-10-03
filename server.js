@@ -272,6 +272,7 @@ app.get('/v1/user/self', authenticate, async (req, res) => {
       console.log('Server running on port: ' + process.env.PORT);
     });
 
+    
     port.on('error', (e) => {
       if (e.code === 'EADDRINUSE') {
         app.listen(process.env.DEFAULT_PORT,  '0.0.0.0',() => {
