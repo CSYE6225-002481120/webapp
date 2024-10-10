@@ -12,10 +12,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_DATABASE: test_db
-          MYSQL_USER: test_user
-          MYSQL_PASSWORD: test_password
-          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: Testdb
+          MYSQL_USER: Tester
+          MYSQL_PASSWORD: TestPassword
+          MYSQL_ROOT_PASSWORD: TestPassword
         ports:
           - 3306:3306
         options: >-
@@ -44,16 +44,16 @@ jobs:
 
       - name: Create .env File
         run: |
-          echo "DB_name=test_db" >> .env
-          echo "DB_username=test_user" >> .env
-          echo "DB_password=test_password" >> .env
+          echo "DB_name=Testdb" >> .env
+          echo "DB_username=Tester" >> .env
+          echo "DB_password=TestPassword" >> .env
           echo "DB_host=127.0.0.1" >> .env
           echo "PORT=3000" >> .env
           echo "DEFAULT_PORT=3001" >> .env
 
       - name: Wait for MySQL to be Ready
         run: |
-          until mysql -h 127.0.0.1 -P 3306 -utest_user -ptest_password -e "SELECT 1"; do
+          until mysql -h 127.0.0.1 -P 3306 -uTester -pTestPassword -e "SELECT 1"; do
             echo "Waiting for MySQL to be ready..."
             sleep 10
           done
@@ -61,14 +61,14 @@ jobs:
       - name: Start Server in the Background
         run: nohup npm start &
         env:
-          DB_name: test_db
-          DB_username: test_user
-          DB_password: test_password
+          DB_name: TestDb
+          DB_username: Tester
+          DB_password: TestPassword
           DB_host: 127.0.0.1
           PORT: 3000
           DEFAULT_PORT: 3001
 
-      - name: Run Tests
+      - name: Run Test-Cases
         run: npm test -- --exit
 
       - name: Stop Server
