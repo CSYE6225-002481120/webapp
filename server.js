@@ -292,4 +292,6 @@ app.get('/v1/user/self', authenticate, async (req, res) => {
   }
 })();
 
+
+
 export  {app, sequelize, User};
