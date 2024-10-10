@@ -19,6 +19,7 @@ app.use((req, res, next) => {
 app.disable('x-powered-by');
 
 
+
 const sequelize = new Sequelize(process.env.DB_name, process.env.DB_username, process.env.DB_password, {
   host: process.env.DB_host,
   dialect: 'mysql',
