@@ -33,7 +33,7 @@ describe('User Routes - POST /v1/user', () => {
     expect(response.body).to.have.property('email', 'test@example.com');
     expect(response.body).to.have.property('account_created');
     expect(response.body).to.have.property('account_updated');
-  });
+  };
 
   // Unit Test - Email  Exists
   it('should return 400 if user with email already exists', async () => {
