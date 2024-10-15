@@ -24,7 +24,7 @@ describe('User Routes - POST /v1/user', () => {
         password: 'Password123',
         firstName: 'John',
         lastName: 'Doe',
-      });
+      );
 
     expect(response.status).to.equal(201);
     expect(response.body).to.have.property('id');
