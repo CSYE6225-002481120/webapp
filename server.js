@@ -135,7 +135,7 @@ app.all('/v1/user/self', (req, res, next)=> {
   }
   next();
 })
-app.post('/v1/user', async (req, res) => {
+app.post('/v2/user', async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(422).send('Request body is empty');
