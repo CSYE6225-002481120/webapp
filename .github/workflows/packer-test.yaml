@@ -1,0 +1,46 @@
+name: Packer Format and Validate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  packer-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Packer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          curl -Lo packer.zip https://releases.hashicorp.com/packer/1.8.2/packer_1.8.2_linux_amd64.zip
+          unzip packer.zip
+          sudo mv packer /usr/local/bin/
+          packer --version
+
+      - name: Run packer fmt to check formatting
+        id: fmt
+        run: |
+          packer fmt -check .
+
+      - name: Check if packer fmt modified any files
+        run: |
+          git diff --exit-code
+        if: ${{ always() }}
+
+      - name: Fail the workflow if files were modified by packer fmt
+        run: exit 1
+        if: ${{ steps.fmt.outcome == 'success' && steps.fmt.outputs.changes == 'true' }}
+
+      - name: Initialize Packer (packer init)
+        run: |
+          packer init .
+
+      - name: Validate Packer template
+        run: |
+          packer validate -var 'app_archive=server.js' .
+
+          

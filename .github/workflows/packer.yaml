@@ -1,0 +1,62 @@
+name: Build and Deploy Application
+
+on:
+  push:
+    branches:
+      - main  
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+     
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'  
+
+     
+      - name: Create application archive
+        run: tar -czvf application.tar.gz server.js package.json package-lock.json  
+
+     
+      - name: Install Packer
+        run: |
+          sudo apt-get update && sudo apt-get install -y unzip
+          curl -fsSL https://releases.hashicorp.com/packer/1.9.1/packer_1.9.1_linux_amd64.zip -o packer.zip
+          unzip -o packer.zip -d /usr/local/bin/
+
+     
+      - name: Build AMI with Packer
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          packer init image.pkr.hcl
+          packer build \
+            -var "vpc_id=${{ secrets.VPC_ID }}" \
+            -var "subnet_id=${{ secrets.SUBNET_ID }}" \
+            -var "security_group_id=${{ secrets.SECURITY_GROUP_ID }}" \
+            -var "ssh_keypair_name=${{ secrets.EC2_KEY_PAIR }}" \
+            -var "DB_USER=${{ secrets.DB_USER }}" \
+            -var "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
+            -var "DB_HOST=${{ secrets.DB_HOST }}" \
+            -var "DB_NAME=${{ secrets.DB_NAME }}" \
+            -var "PORT=${{ secrets.PORT }}" \
+            -var "DEFAULT_PORT=${{ secrets.DEFAULT_PORT }}" \
+            image.pkr.hcl
+
+      
+            
+      - name: Save AMI ID
+        id: ami
+        run: |
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d':' -f2)
+          echo "AMI_ID=$AMI_ID"
+          echo "::set-output name=ami_id::$AMI_ID"
