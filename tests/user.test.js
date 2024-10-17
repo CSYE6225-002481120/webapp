@@ -9,7 +9,8 @@ import dotenv from 'dotenv';
 dotenv.config();
  
 
-describe('User Routes - POST /v1/user', () => {
+
+describe('User Routes - POST /v2/user', () => {
   beforeEach(async () => {
    
     await sequelize.sync({ force: true });
@@ -18,7 +19,7 @@ describe('User Routes - POST /v1/user', () => {
   // Integration Test -  User Creation
   it('should create a new user with valid data', async () => {
     const response = await request(app)
-      .post('/v1/user')
+      .post('/v2/user')
       .send({
         email: 'test@example.com',
         password: 'Password123',
@@ -47,7 +48,7 @@ describe('User Routes - POST /v1/user', () => {
     await User.create(existingUser);
 
     const response = await request(app)
-      .post('/v1/user')
+      .post('/v2/user')
       .send({
         email: 'existing@example.com',
         password: 'Password123',
@@ -61,7 +62,7 @@ describe('User Routes - POST /v1/user', () => {
 
   // Unit Test - Empty Request Body
   it('should return 422 if request body is empty', async () => {
-    const response = await request(app).post('/v1/user').send({});
+    const response = await request(app).post('/v2/user').send({});
     expect(response.status).to.equal(422);
     expect(response.text).to.equal('Request body is empty');
   });
@@ -69,7 +70,7 @@ describe('User Routes - POST /v1/user', () => {
   // Unit Test - Invalid Email Format
   it('should return 422 for invalid email format', async () => {
     const response = await request(app)
-      .post('/v1/user')
+      .post('/v2/user')
       .send({
         email: 'invalid-email-format',
         password: 'Password123',
@@ -83,7 +84,7 @@ describe('User Routes - POST /v1/user', () => {
   // Unit Test - Password Less Than 8 Characters
   it('should return 422 for password less than 8 characters', async () => {
     const response = await request(app)
-      .post('/v1/user')
+      .post('/v2/user')
       .send({
         email: 'test@example.com',
         password: 'Pass12',

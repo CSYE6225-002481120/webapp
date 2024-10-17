@@ -42,3 +42,5 @@ jobs:
       - name: Validate Packer template
         run: |
           packer validate -var 'app_archive=server.js' .
+
+          

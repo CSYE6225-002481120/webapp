@@ -53,6 +53,7 @@ jobs:
             image.pkr.hcl
 
       
+            
       - name: Save AMI ID
         id: ami
         run: |
