@@ -71,7 +71,7 @@ app.all('/healthz', (req, res, next) => {
   next();
 });
 
-app.get('/healthz', async (req, res) => {
+app.get('/healthzz', async (req, res) => {
   try {
     if (Object.keys(req.query).length > 0) {
       return res.status(400).end();
