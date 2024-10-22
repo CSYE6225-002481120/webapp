@@ -5,7 +5,7 @@ the assignment is to build a health check api that pre checks if everything is c
 If the database is not connected then 503 service unavilable should be given
 
 If any other method instead of GET is sent as a request then 405 should be given
-
+test
 If any payload is sent then 400 should be given
 
 for this webapp to run first install the following dependencies and environment 
