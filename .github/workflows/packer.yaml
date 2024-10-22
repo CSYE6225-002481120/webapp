@@ -3,7 +3,8 @@ name: Build and Deploy Application
 on:
   push:
     branches:
-      - main  
+      - main 
+      - patch01
 
 jobs:
   build:
