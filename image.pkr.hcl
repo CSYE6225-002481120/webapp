@@ -1,4 +1,4 @@
-packer {
+        acker {
   required_plugins {
     amazon = {
       version = ">= 1.0.0"
