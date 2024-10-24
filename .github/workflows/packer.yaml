@@ -42,7 +42,6 @@ jobs:
           packer build \
             -var "vpc_id=${{ secrets.VPC_ID }}" \
             -var "subnet_id=${{ secrets.SUBNET_ID }}" \
-            -var "security_group_id=${{ secrets.SECURITY_GROUP_ID }}" \
             -var "ssh_keypair_name=${{ secrets.EC2_KEY_PAIR }}" \
             -var "DB_USER=${{ secrets.DB_USER }}" \
             -var "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" \
@@ -54,9 +53,4 @@ jobs:
 
       
             
-      - name: Save AMI ID
-        id: ami
-        run: |
-          AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d':' -f2)
-          echo "AMI_ID=$AMI_ID"
-          echo "::set-output name=ami_id::$AMI_ID"
+      

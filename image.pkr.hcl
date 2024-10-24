@@ -13,6 +13,14 @@ variable "aws_region" {
   default     = "us-east-1"
   description = "The AWS region where the image will be built"
 }
+
+variable "demo_aws_account" {
+  type        = string
+  description = "The AWS account ID to share the AMI with"
+  default     = "982081064063"
+}
+
+
 variable "app_archive" {
   type        = string
   default     = "application.tar.gz"
@@ -69,26 +77,26 @@ variable "security_group_id" {
 
 variable "DB_USER" {
   type        = string
-  default     = "default_user"
   description = "The database username"
+  default     = "csye6225"
 }
 
 variable "DB_PASSWORD" {
   type        = string
-  default     = "default_password"
   description = "The database password"
+  default     = "vacbookpro"
 }
 
 variable "DB_HOST" {
   type        = string
-  default     = "127.0.0.1"
-  description = "The database host"
+  description = "The RDS database host"
+  default     = ""
 }
 
 variable "DB_NAME" {
   type        = string
-  default     = "default_db"
   description = "The database name"
+  default     = "csye6225"
 }
 
 variable "PORT" {
@@ -103,26 +111,25 @@ variable "DEFAULT_PORT" {
   description = "The default port for the application"
 }
 
-
 source "amazon-ebs" "ubuntu" {
-  region        = var.aws_region
-  source_ami    = var.source_ami
-  instance_type = var.instance_type
-  ssh_username  = var.ssh_username
-  ami_name      = "${var.ami_name}${formatdate("YYYYMMDDHHmmss", timestamp())}"
-  vpc_id        = var.vpc_id
-  subnet_id     = var.subnet_id
-
-
-
+  region                      = var.aws_region
+  source_ami                  = var.source_ami
+  instance_type               = var.instance_type
+  ssh_username                = var.ssh_username
+  ami_name                    = "${var.ami_name}${formatdate("YYYYMMDDHHmmss", timestamp())}"
+  vpc_id                      = var.vpc_id
+  subnet_id                   = var.subnet_id
   associate_public_ip_address = true
 
   ami_block_device_mappings {
     device_name           = "/dev/sda1"
     volume_size           = 25
+    encrypted             = false
     delete_on_termination = true
     volume_type           = "gp2"
   }
+
+  ami_users = ["${var.demo_aws_account}"]
 
   tags = {
     Name        = "${var.ami_name}${formatdate("YYYYMMDDHHmmss", timestamp())}"
@@ -134,25 +141,19 @@ build {
   sources = ["source.amazon-ebs.ubuntu"]
 
 
-
   provisioner "shell" {
     inline = [
       "sudo apt-get update",
-      "sudo apt-get install -y nodejs npm mysql-server",
-      "sudo systemctl start mysql",
-      "sudo systemctl enable mysql",
-      "sudo mysql -e 'CREATE DATABASE IF NOT EXISTS cloud;'",
+      "sudo apt-get install -y nodejs npm",
       "sudo groupadd csye6225 || true",
       "sudo useradd -r -g csye6225 -s /usr/sbin/nologin csye6225 || true"
     ]
   }
 
-
   provisioner "file" {
     source      = "${var.app_archive}"
     destination = "/home/ubuntu/${var.app_archive}"
   }
-
 
   provisioner "shell" {
     inline = [
@@ -163,10 +164,8 @@ build {
 
       "if [ -f '/home/csye6225/app/${var.app_archive}' ]; then echo '${var.app_archive} is a file.'; else echo 'Error: ${var.app_archive} is not a file.'; exit 1; fi",
 
-
       "sudo chown -R csye6225:csye6225 /home/csye6225/app",
       "cd /home/csye6225/app && sudo -u csye6225 tar -xzvf ${var.app_archive}",
-
 
       "sudo chown -R csye6225:csye6225 /home/csye6225/",
 
@@ -174,15 +173,10 @@ build {
       "cd /home/csye6225/app && sudo -u csye6225 npm install --production",
 
 
-      "sudo mysql -e \"CREATE USER '${var.DB_USER}'@'${var.DB_HOST}' IDENTIFIED BY '${var.DB_PASSWORD}';\"",
-      "sudo mysql -e \"GRANT ALL PRIVILEGES ON *.* TO '${var.DB_USER}'@'${var.DB_HOST}' WITH GRANT OPTION;\"",
-      "sudo mysql -e \"FLUSH PRIVILEGES;\"",
-
-
       "sudo bash -c \"echo 'DB_name=${var.DB_NAME}' > /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DB_username=${var.DB_USER}' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DB_password=${var.DB_PASSWORD}' >> /home/csye6225/app/.env\"",
-      "sudo bash -c \"echo 'DB_host=${var.DB_HOST}' >> /home/csye6225/app/.env\"",
+      "sudo bash -c \"echo 'DB_host=PLACEHOLDER_DB_HOST' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'PORT=${var.PORT}' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DEFAULT_PORT=${var.DEFAULT_PORT}' >> /home/csye6225/app/.env\"",
       "sudo chown csye6225:csye6225 /home/csye6225/app/.env"

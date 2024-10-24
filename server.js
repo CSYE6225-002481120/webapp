@@ -94,41 +94,51 @@ app.get('/healthz', async (req, res) => {
 
 const authenticate = async (req, res, next) => {
   try {
+    
     const AuthorizationHeader = req.get('Authorization');
     if (!AuthorizationHeader) {
-      return res.status(401).end();
+      return res.status(401).json({ message: 'Authorization header missing' });
     }
 
-    const [email, password] = AuthorizationHeader.split(':');
+    let email, password;
+
+    
+    if (AuthorizationHeader.startsWith('Basic ')) {
+     
+      const credsBase64 = AuthorizationHeader.split(' ')[1];
+      const creds = Buffer.from(credsBase64, 'base64').toString('ascii');
+      [email, password] = creds.split(':');
+    } else {
+      
+      [email, password] = AuthorizationHeader.split(':');
+    }
+
+   
     if (!email || !password) {
-      return res.status(401).json({ message: 'Invalid credentials format. Use email:password' });
+      return res.status(401).json({ message: 'Invalid credentials format. Use email and password' });
     }
 
-    const credsBase64 = Buffer.from(`${email}:${password}`).toString('base64');
-    req.headers['authorization'] = `Basic ${credsBase64}`;
-    const creds = basicAuth(req);
-
-    if (!creds || !creds.name || !creds.pass) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    const user = await User.findOne({ where: { email: creds.name } });
+    
+    const user = await User.findOne({ where: { email } });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const passwordMatch = await bcrypt.compare(creds.pass, user.password);
+    
+    const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+   
     req.user = user;
     next();
   } catch (error) {
     console.error('Error in authentication middleware:', error);
-    return res.status(500).end();
+    return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 
 
