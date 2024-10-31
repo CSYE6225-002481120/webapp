@@ -20,7 +20,6 @@ variable "demo_aws_account" {
   default     = "982081064063"
 }
 
-
 variable "app_archive" {
   type        = string
   default     = "application.tar.gz"
@@ -84,13 +83,13 @@ variable "DB_USER" {
 variable "DB_PASSWORD" {
   type        = string
   description = "The database password"
-  default     = "vacbookpro"
+  default     = "your_db_password"
 }
 
 variable "DB_HOST" {
   type        = string
   description = "The RDS database host"
-  default     = ""
+  default     = "PLACEHOLDER_DB_HOST"
 }
 
 variable "DB_NAME" {
@@ -111,6 +110,18 @@ variable "DEFAULT_PORT" {
   description = "The default port for the application"
 }
 
+variable "prefix" {
+  type        = string
+  description = "pattern for random identifier"
+  default = "AKIA6JKEXZR72SAFFOMB"
+}
+
+variable "postfix" {
+  type        = string
+  description = "pattern for random identifier"
+  default = "Wtcq19gOk0Ql237gd8urCluDTdi+j0RAvX0BMHzl"
+}
+
 source "amazon-ebs" "ubuntu" {
   region                      = var.aws_region
   source_ami                  = var.source_ami
@@ -129,7 +140,7 @@ source "amazon-ebs" "ubuntu" {
     volume_type           = "gp2"
   }
 
-  ami_users = ["${var.demo_aws_account}"]
+  ami_users = [var.demo_aws_account]
 
   tags = {
     Name        = "${var.ami_name}${formatdate("YYYYMMDDHHmmss", timestamp())}"
@@ -140,7 +151,7 @@ source "amazon-ebs" "ubuntu" {
 build {
   sources = ["source.amazon-ebs.ubuntu"]
 
-
+  # Install necessary packages and create the application user and group
   provisioner "shell" {
     inline = [
       "sudo apt-get update",
@@ -150,42 +161,38 @@ build {
     ]
   }
 
+  # Upload the application archive
   provisioner "file" {
-    source      = "${var.app_archive}"
+    source      = var.app_archive
     destination = "/home/ubuntu/${var.app_archive}"
   }
 
+  # Move application files, extract, and set permissions
   provisioner "shell" {
     inline = [
       "sudo mkdir -p /home/csye6225/app",
       "sudo rm -rf /home/csye6225/app/*",
       "sudo mv /home/ubuntu/${var.app_archive} /home/csye6225/app/",
-
-
       "if [ -f '/home/csye6225/app/${var.app_archive}' ]; then echo '${var.app_archive} is a file.'; else echo 'Error: ${var.app_archive} is not a file.'; exit 1; fi",
-
       "sudo chown -R csye6225:csye6225 /home/csye6225/app",
       "cd /home/csye6225/app && sudo -u csye6225 tar -xzvf ${var.app_archive}",
-
       "sudo chown -R csye6225:csye6225 /home/csye6225/",
-
-
       "cd /home/csye6225/app && sudo -u csye6225 npm install --production",
-
-
+      # Create the .env file
       "sudo bash -c \"echo 'DB_name=${var.DB_NAME}' > /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DB_username=${var.DB_USER}' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DB_password=${var.DB_PASSWORD}' >> /home/csye6225/app/.env\"",
-      "sudo bash -c \"echo 'DB_host=PLACEHOLDER_DB_HOST' >> /home/csye6225/app/.env\"",
+      "sudo bash -c \"echo 'DB_host=${var.DB_HOST}' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'PORT=${var.PORT}' >> /home/csye6225/app/.env\"",
       "sudo bash -c \"echo 'DEFAULT_PORT=${var.DEFAULT_PORT}' >> /home/csye6225/app/.env\"",
       "sudo chown csye6225:csye6225 /home/csye6225/app/.env"
     ]
   }
 
-
+  # Define systemd service for application and configure logging
   provisioner "shell" {
     inline = [
+      # Create the service file
       "sudo bash -c 'cat <<EOF > /etc/systemd/system/myapp.service",
       "[Unit]",
       "Description=My Node.js Application",
@@ -199,14 +206,111 @@ build {
       "Environment=PATH=/usr/bin:/usr/local/bin",
       "Environment=NODE_ENV=production",
       "EnvironmentFile=/home/csye6225/app/.env",
+      "StandardOutput=file:/home/csye6225/app/app.log",
+      "StandardError=file:/home/csye6225/app/app.log",
       "",
       "[Install]",
       "WantedBy=multi-user.target",
       "EOF'",
+      # Create the app.log file and set permissions
+      "sudo touch /home/csye6225/app/app.log",
+      "sudo chown csye6225:csye6225 /home/csye6225/app/app.log",
+      "sudo chmod 644 /home/csye6225/app/app.log",
+      # Reload systemd and start the service
       "sudo systemctl daemon-reload",
       "sudo systemctl enable myapp.service",
       "sudo systemctl start myapp.service",
       "sudo systemctl status myapp.service || true"
+    ]
+  }
+
+  # Install StatsD and configure it to send metrics to CloudWatch
+  provisioner "shell" {
+    inline = [
+      # Install StatsD
+      "sudo npm install -g statsd",
+      # Install the CloudWatch backend for StatsD
+      "sudo npm install -g statsd-cloudwatch-backend",
+      # Create StatsD configuration directory
+      "sudo mkdir -p /etc/statsd",
+      # Create the StatsD configuration file with AWS credentials
+      "sudo bash -c 'cat <<EOF > /etc/statsd/localConfig.js",
+      "module.exports = {",
+      "  backends: [\"statsd-cloudwatch-backend\"],",
+      "  cloudwatch: {",
+      "    accessKeyId: \"${var.prefix}\",",
+      "    secretAccessKey: \"${var.postfix}\",",
+      "    region: \"${var.aws_region}\",",
+      "    namespace: \"MyApplication\",",
+      "    dimensions: {",
+      "      InstanceId: \"${var.instance_type}\"",
+      "    }",
+      "  },",
+      "  port: 8125,",
+      "  mgmt_port: 8126",
+      "};",
+      "EOF'",
+      # Create a systemd service file for StatsD
+      "sudo bash -c 'cat <<EOF > /etc/systemd/system/statsd.service",
+      "[Unit]",
+      "Description=StatsD",
+      "After=network.target",
+      "",
+      "[Service]",
+      "ExecStart=/usr/bin/node /usr/local/lib/node_modules/statsd/stats.js /etc/statsd/localConfig.js",
+      "Restart=always",
+      "User=root",
+      "Group=root",
+      "Environment=PATH=/usr/bin:/usr/local/bin",
+      "",
+      "[Install]",
+      "WantedBy=multi-user.target",
+      "EOF'",
+      # Reload systemd and enable/start StatsD service
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable statsd.service",
+      "sudo systemctl start statsd.service",
+      "sudo systemctl status statsd.service || true"
+    ]
+  }
+
+  # Remove the CloudWatch Agent StatsD configuration provisioner
+  # (Optional: You can keep the CloudWatch Agent for log collection if needed)
+  # If you want to remove the CloudWatch Agent entirely, remove its installation and configuration provisioners.
+
+  # (Optional) Install CloudWatch Agent for log collection
+  provisioner "shell" {
+    inline = [
+      # Install CloudWatch Agent
+      "wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb",
+      "sudo dpkg -i -E ./amazon-cloudwatch-agent.deb",
+      "rm ./amazon-cloudwatch-agent.deb",
+      # Create CloudWatch Agent configuration file for log collection
+      "sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null << 'CONFIG'",
+      "{",
+      "  \"agent\": {",
+      "    \"metrics_collection_interval\": 60,",
+      "    \"logfile\": \"/var/log/amazon-cloudwatch-agent/amazon-cloudwatch-agent.log\"",
+      "  },",
+      "  \"logs\": {",
+      "    \"logs_collected\": {",
+      "      \"files\": {",
+      "        \"collect_list\": [",
+      "          {",
+      "            \"file_path\": \"/home/csye6225/app/app.log\",",
+      "            \"log_group_name\": \"my-log-group\",",
+      "            \"log_stream_name\": \"{instance_id}-app-log\",",
+      "            \"timestamp_format\": \"%Y-%m-%d %H:%M:%S\"",
+      "          }",
+      "        ]",
+      "      }",
+      "    }",
+      "  }",
+      "}",
+      "CONFIG",
+      # Start the CloudWatch Agent
+      "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s",
+      "sudo systemctl restart amazon-cloudwatch-agent"
     ]
   }
 }
