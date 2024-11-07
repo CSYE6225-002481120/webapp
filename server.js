@@ -563,7 +563,7 @@ app.post('/v1/user/self/pic', authenticate, upload.single('image'), async (req, 
     // Check if the user already has an uploaded image
     if (user.file_name && user.url) {
       logger.warn('User already has an uploaded image', { userId: user.id });
-      return res.status(422).json({ message: 'User already has an uploaded image' });
+      return res.status(409).json({ message: 'User already has an uploaded image' });
     }
 
     if (!req.file) {
