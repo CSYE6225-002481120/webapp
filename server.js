@@ -10,6 +10,7 @@ import AWS from 'aws-sdk';
 import multer from 'multer';
 import winston from 'winston';
 import StatsD from 'node-statsd';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -169,6 +170,18 @@ const User = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    verificationToken: {
+      type: DataTypes.STRING,
+      allowNull: true, // Can be null once the user is verified
+    },
+    tokenExpiration: {
+      type: DataTypes.DATE,
+      allowNull: true, // Can be null once the user is verified
+    },
+    isVerified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false, // User is not verified by default
+    },      
   },
   {
     timestamps: false,
@@ -287,98 +300,98 @@ app.all('/v1/user/self/pic', (req, res, next) => {
   next();
 });
 
+import crypto from 'crypto'; // To generate a secure token
+import AWS from 'aws-sdk'; // AWS SDK to interact with SNS
+
 app.post('/v2/user', async (req, res) => {
   // Start timing the overall request
   const requestStartTime = process.hrtime();
 
   try {
+    // Check if request body is empty
     if (!req.body || Object.keys(req.body).length === 0) {
       logger.warn('Empty request body in user creation');
       return res.status(422).send('Request body is empty');
     }
+
     const { email, password, firstName, lastName } = req.body;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!req.body.firstName || firstName.trim() === '') {
+
+    // Validate user input
+    if (!firstName || firstName.trim() === '') {
       logger.warn('Firstname cannot be empty');
       return res.status(422).json({ message: 'Firstname cannot be empty' });
     }
-    if (!req.body.lastName || lastName.trim() === '') {
+    if (!lastName || lastName.trim() === '') {
       logger.warn('Lastname cannot be empty');
       return res.status(422).json({ message: 'Lastname cannot be empty' });
     }
-    if (password.trim() === '') {
-      logger.warn('Password cannot be empty');
-      return res.status(422).json({ message: 'Password cannot be empty' });
-    }
-    if (password.includes(' ')) {
-      logger.warn('Password cannot have space');
-      return res.status(422).json({ message: 'Password cannot have space' });
-    }
-    if (password.length < 8) {
-      logger.warn('Password too short');
-      return res
-        .status(422)
-        .json({ message: 'Password should be at least 8 characters' });
+    if (!password || password.trim() === '' || password.includes(' ') || password.length < 8) {
+      logger.warn('Invalid password');
+      return res.status(422).json({ message: 'Password should be at least 8 characters and cannot contain spaces' });
     }
     if (!emailRegex.test(email)) {
       logger.warn('Invalid email format');
       return res.status(422).json({ message: 'Invalid email format' });
     }
 
-    // Start timing the database operation
-    const dbStartTime = process.hrtime();
-
+    // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
-
-    // Measure DB operation duration for findOne
-    const dbDiffFindOne = process.hrtime(dbStartTime);
-    const dbDurationInMsFindOne = (dbDiffFindOne[0] * 1e9 + dbDiffFindOne[1]) / 1e6;
-
-    // Send timing metric for database time
-    statsdClient.timing('POST.Create_database_time', dbDurationInMsFindOne);
-
     if (existingUser) {
       logger.warn('User already exists', { email });
       return res.status(400).json({ message: 'User already exists' });
     }
+
+    // Hash the password
     const encrypted_password = await bcrypt.hash(password, 10);
+
+    // Generate verification token and expiration time
+    const token = crypto.randomBytes(32).toString('hex');
+    const expirationTime = new Date(Date.now() + 1 * 60 * 1000); // Token expires in 1 minute
+
+    // Create new user with verification details
     const newUser = await User.create({
       email,
       password: encrypted_password,
       firstName,
       lastName,
+      verificationToken: token,
+      tokenExpiration: expirationTime,
+      isVerified: false, // Assuming the User model has an isVerified field
     });
 
-    // Measure DB operation duration for create
-    const dbDiffCreate = process.hrtime(dbStartTime);
-    const dbDurationInMsCreate = (dbDiffCreate[0] * 1e9 + dbDiffCreate[1]) / 1e6;
+    // Publish message to SNS topic for Lambda to send verification email
+    const sns = new AWS.SNS();
+    const message = JSON.stringify({
+      email: newUser.email,
+      token: token,
+    });
+    const params = {
+      Message: message,
+      TopicArn: process.env.SNS_TOPIC_ARN,
+    };
 
-    // Send timing metric for database time
-    statsdClient.timing('POST.Create_database_time', dbDurationInMsCreate);
+    try {
+      await sns.publish(params).promise();
+      logger.info('SNS message published for user verification', { userId: newUser.id });
+    } catch (snsError) {
+      logger.error('Error publishing SNS message', { error: snsError.message });
+    }
 
-    const createtime = moment(newUser.account_created)
-      .tz('America/New_York')
-      .format();
-    const updatetime = moment(newUser.account_updated)
-      .tz('America/New_York')
-      .format();
-    logger.info('User created successfully', { userId: newUser.id });
-
-    // Measure total request time
+    // Calculate request duration
     const requestDiff = process.hrtime(requestStartTime);
     const requestDurationInMs = (requestDiff[0] * 1e9 + requestDiff[1]) / 1e6;
-
-    // Send timing metric for response time
     statsdClient.timing('POST.Create_responsetime', requestDurationInMs);
 
+    // Return success response
     return res.status(201).json({
-      description: 'User created successfully',
+      description: 'User created successfully. Verification email sent.',
       id: newUser.id,
       firstName: newUser.firstName,
       lastName: newUser.lastName,
       email: newUser.email,
-      account_created: createtime,
-      account_updated: updatetime,
+      account_created: moment(newUser.account_created).tz('America/New_York').format(),
+      account_updated: moment(newUser.account_updated).tz('America/New_York').format(),
     });
   } catch (error) {
     logger.error('Error creating user', { error: error.message });
@@ -393,6 +406,7 @@ app.post('/v2/user', async (req, res) => {
     });
   }
 });
+
 
 app.put('/v1/user/self', authenticate, async (req, res) => {
   // Start timing the overall request
@@ -627,6 +641,39 @@ app.post('/v1/user/self/pic', authenticate, upload.single('image'), async (req, 
     return res.status(500).json({ message: 'Error uploading image' });
   }
 });
+
+app.get('/v1/user/verify', async (req, res) => {
+  const { token } = req.query;
+
+  if (!token) {
+    logger.warn('No token provided for verification');
+    return res.status(400).json({ message: 'Verification token is required' });
+  }
+
+  try {
+    const user = await User.findOne({ where: { verificationToken: token } });
+
+    // Check if user exists and token is valid
+    if (!user || user.tokenExpiration < new Date()) {
+      logger.warn('Invalid or expired token');
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    // Mark user as verified
+    await user.update({
+      isVerified: true,
+      verificationToken: null,
+      tokenExpiration: null,
+    });
+
+    logger.info('User verified successfully', { email: user.email });
+    return res.status(200).json({ message: 'Email verified successfully' });
+  } catch (error) {
+    logger.error('Error verifying email', { error: error.message });
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 
 
 // Delete user picture
