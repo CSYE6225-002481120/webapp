@@ -302,10 +302,9 @@ app.all('/v1/user/self/pic', (req, res, next) => {
   next();
 });
 
-import crypto from 'crypto'; // To generate a secure token
-import AWS from 'aws-sdk'; // AWS SDK to interact with SNS
 
-app.post('/v2/user', async (req, res) => {
+
+app.post('/v1/user', async (req, res) => {
   // Start timing the overall request
   const requestStartTime = process.hrtime();
 
