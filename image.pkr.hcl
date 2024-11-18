@@ -151,7 +151,9 @@ source "amazon-ebs" "ubuntu" {
 
 build {
   sources = ["source.amazon-ebs.ubuntu"]
-
+  post-processor "manifest" {
+    output = "manifest.json"
+  }
   # Install necessary packages and create the application user and group
   provisioner "shell" {
     inline = [
