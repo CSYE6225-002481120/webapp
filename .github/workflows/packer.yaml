@@ -53,7 +53,7 @@ jobs:
             -var "DB_NAME=${{ secrets.DB_NAME }}" \
             -var "PORT=${{ secrets.PORT }}" \
             -var "DEFAULT_PORT=${{ secrets.DEFAULT_PORT }}" \
-            
+
             image.pkr.hcl
 
       - name: Extract AMI ID
