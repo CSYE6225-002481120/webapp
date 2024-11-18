@@ -360,7 +360,7 @@ app.post('/v1/user', async (req, res) => {
     });
 
     // Publish message to SNS topic for Lambda to send verification email
-    const sns = new AWS.SNS();
+    const sns = new AWS.SNS({region:"us-east-1"});
     const message = JSON.stringify({
       email: newUser.email,
       token: token,
