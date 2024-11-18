@@ -56,7 +56,6 @@ jobs:
             -var "region=${{ env.AWS_REGION }}" \
             -var "source_ami=${{ secrets.SOURCE_AMI_ID }}" \
             -var "instance_type=${{ secrets.INSTANCE_TYPE }}" \
-          
             image.pkr.hcl
 
       - name: Extract AMI ID
