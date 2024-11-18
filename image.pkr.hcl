@@ -29,7 +29,7 @@ variable "app_archive" {
 
 variable "source_ami" {
   type        = string
-  default     = "ami-0866a3c8686eaeeba"
+  default     = "ami-00c3ca5c7ec8874cd"
   description = "The source AMI ID for Ubuntu 24.04 LTS"
 }
 
