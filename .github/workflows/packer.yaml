@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
      
@@ -31,12 +35,11 @@ jobs:
           curl -fsSL https://releases.hashicorp.com/packer/1.9.1/packer_1.9.1_linux_amd64.zip -o packer.zip
           unzip -o packer.zip -d /usr/local/bin/
 
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
      
       - name: Build AMI with Packer
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           packer init image.pkr.hcl
           packer build \
@@ -49,8 +52,79 @@ jobs:
             -var "DB_NAME=${{ secrets.DB_NAME }}" \
             -var "PORT=${{ secrets.PORT }}" \
             -var "DEFAULT_PORT=${{ secrets.DEFAULT_PORT }}" \
+            -var "ami_name=MyApp-AMI-{{timestamp}}" \
+            -var "region=${{ env.AWS_REGION }}" \
+            -var "source_ami=${{ secrets.SOURCE_AMI_ID }}" \
+            -var "instance_type=${{ secrets.INSTANCE_TYPE }}" \
+            -var "security_group_id=${{ secrets.SECURITY_GROUP_ID }}" \
             image.pkr.hcl
 
-      
-            
-      
+      - name: Extract AMI ID
+        id: extract_ami_id
+        run: |
+          AMI_ID=$(jq -r '.builds[-1].artifact_id' manifest.json | cut -d':' -f2)
+          echo "AMI_ID=${AMI_ID}"
+          echo "ami_id=${AMI_ID}" >> $GITHUB_OUTPUT
+
+      - name: Update Launch Template with new AMI
+        id: update_launch_template
+        run: |
+          LAUNCH_TEMPLATE_ID=${{ secrets.LAUNCH_TEMPLATE_ID }}
+          AMI_ID=${{ steps.extract_ami_id.outputs.ami_id }}
+          echo "Creating new launch template version with AMI ID: $AMI_ID"
+          DEFAULT_VERSION=$(aws ec2 describe-launch-templates --launch-template-ids $LAUNCH_TEMPLATE_ID --query 'LaunchTemplates[0].DefaultVersionNumber' --output text)
+          echo "Default launch template version: $DEFAULT_VERSION"
+          CREATE_OUTPUT=$(aws ec2 create-launch-template-version \
+            --launch-template-id $LAUNCH_TEMPLATE_ID \
+            --source-version $DEFAULT_VERSION \
+            --version-description "Updated with new AMI $AMI_ID" \
+            --launch-template-data "{\"ImageId\":\"$AMI_ID\"}")
+          NEW_VERSION=$(echo $CREATE_OUTPUT | jq -r '.LaunchTemplateVersion.VersionNumber')
+          echo "New launch template version: $NEW_VERSION"
+          # Set the new version as the default version
+          aws ec2 modify-launch-template \
+            --launch-template-id $LAUNCH_TEMPLATE_ID \
+            --default-version $NEW_VERSION
+
+      - name: Start Instance Refresh
+        id: start_instance_refresh
+        run: |
+          AUTO_SCALING_GROUP_NAME=${{ secrets.AUTO_SCALING_GROUP_NAME }}
+          echo "Starting instance refresh for ASG: $AUTO_SCALING_GROUP_NAME"
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name $AUTO_SCALING_GROUP_NAME \
+            --preferences '{"InstanceWarmup": 300, "MinHealthyPercentage": 50}' \
+            --query 'InstanceRefreshId' \
+            --output text)
+          echo "Instance Refresh ID: $REFRESH_ID"
+          echo "refresh_id=${REFRESH_ID}" >> $GITHUB_OUTPUT
+
+      - name: Wait for Instance Refresh to Complete
+        run: |
+          AUTO_SCALING_GROUP_NAME=${{ secrets.AUTO_SCALING_GROUP_NAME }}
+          REFRESH_ID=${{ steps.start_instance_refresh.outputs.refresh_id }}
+          echo "Waiting for instance refresh $REFRESH_ID to complete..."
+          TIMEOUT=1800  # 30 minutes
+          INTERVAL=30
+          ELAPSED=0
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name $AUTO_SCALING_GROUP_NAME \
+              --instance-refresh-ids $REFRESH_ID \
+              --query 'InstanceRefreshes[0].Status' \
+              --output text)
+            echo "Instance Refresh Status: $STATUS"
+            if [ "$STATUS" = "Successful" ]; then
+              echo "Instance refresh completed successfully."
+              exit 0
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "Instance refresh failed."
+              exit 1
+            else
+              echo "Instance refresh is in progress..."
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            fi
+          done
+          echo "Instance refresh did not complete within timeout."
+          exit 1
