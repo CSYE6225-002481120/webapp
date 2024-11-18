@@ -14,21 +14,17 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
 
     steps:
-     
       - name: Checkout code
         uses: actions/checkout@v3
 
-      
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'  
 
-     
       - name: Create application archive
         run: tar -czvf application.tar.gz server.js package.json package-lock.json  
 
-     
       - name: Install Packer
         run: |
           sudo apt-get update && sudo apt-get install -y unzip
@@ -38,7 +34,6 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
-     
       - name: Build AMI with Packer
         run: |
           packer init image.pkr.hcl
@@ -56,7 +51,7 @@ jobs:
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "source_ami=${{ secrets.SOURCE_AMI_ID }}" \
             -var "instance_type=${{ secrets.INSTANCE_TYPE }}" \
-            image.pkr.hcl
+          image.pkr.hcl
 
       - name: Extract AMI ID
         id: extract_ami_id
@@ -88,10 +83,10 @@ jobs:
       - name: Start Instance Refresh
         id: start_instance_refresh
         run: |
-          AUTO_SCALING_GROUP_NAME=${{ secrets.AUTO_SCALING_GROUP_NAME }}
+          AUTO_SCALING_GROUP_NAME="${{ secrets.AUTO_SCALING_GROUP_NAME }}"
           echo "Starting instance refresh for ASG: $AUTO_SCALING_GROUP_NAME"
           REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name $AUTO_SCALING_GROUP_NAME \
+            --auto-scaling-group-name "$AUTO_SCALING_GROUP_NAME" \
             --preferences '{"InstanceWarmup": 300, "MinHealthyPercentage": 50}' \
             --query 'InstanceRefreshId' \
             --output text)
@@ -100,7 +95,7 @@ jobs:
 
       - name: Wait for Instance Refresh to Complete
         run: |
-          AUTO_SCALING_GROUP_NAME=${{ secrets.AUTO_SCALING_GROUP_NAME }}
+          AUTO_SCALING_GROUP_NAME="${{ secrets.AUTO_SCALING_GROUP_NAME }}"
           REFRESH_ID=${{ steps.start_instance_refresh.outputs.refresh_id }}
           echo "Waiting for instance refresh $REFRESH_ID to complete..."
           TIMEOUT=1800  # 30 minutes
@@ -108,8 +103,8 @@ jobs:
           ELAPSED=0
           while [ $ELAPSED -lt $TIMEOUT ]; do
             STATUS=$(aws autoscaling describe-instance-refreshes \
-              --auto-scaling-group-name $AUTO_SCALING_GROUP_NAME \
-              --instance-refresh-ids $REFRESH_ID \
+              --auto-scaling-group-name "$AUTO_SCALING_GROUP_NAME" \
+              --instance-refresh-ids "$REFRESH_ID" \
               --query 'InstanceRefreshes[0].Status' \
               --output text)
             echo "Instance Refresh Status: $STATUS"
