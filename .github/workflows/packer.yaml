@@ -53,11 +53,7 @@ jobs:
             -var "DB_NAME=${{ secrets.DB_NAME }}" \
             -var "PORT=${{ secrets.PORT }}" \
             -var "DEFAULT_PORT=${{ secrets.DEFAULT_PORT }}" \
-            -var "ami_name=MyApp-AMI-{{timestamp}}" \
-            -var "aws_region=${{ env.AWS_REGION }}" \
-            -var "source_ami=${{ secrets.SOURCE_AMI_ID }}" \
-            -var "instance_type=${{ secrets.INSTANCE_TYPE }}" \
-            -var "security_group_id=${{ secrets.SECURITY_GROUP_ID }}" \
+
             image.pkr.hcl
 
       - name: Extract AMI ID
