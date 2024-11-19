@@ -20,6 +20,11 @@ variable "demo_aws_account" {
   description = "The AWS account ID to share the AMI with"
   default     = "982081064063"
 }
+variable "dev_aws_account" {
+  type        = string
+  description = "The AWS account ID to share the AMI with"
+  default     = "495599755724"
+}
 
 variable "app_archive" {
   type        = string
@@ -141,7 +146,7 @@ source "amazon-ebs" "ubuntu" {
     volume_type           = "gp2"
   }
 
-  ami_users = [var.demo_aws_account]
+  ami_users = [var.demo_aws_account, var.dev_aws_account]
 
   tags = {
     Name        = "${var.ami_name}${formatdate("YYYYMMDDHHmmss", timestamp())}"
