@@ -218,7 +218,7 @@ const authenticate = async (req, res, next) => {
     const dbStartTime = process.hrtime();
 
     const user = await User.findOne({ where: { email } });
-
+    
     // Measure DB operation duration
     const dbDiff = process.hrtime(dbStartTime);
     const dbDurationInMs = (dbDiff[0] * 1e9 + dbDiff[1]) / 1e6;
@@ -229,6 +229,9 @@ const authenticate = async (req, res, next) => {
     if (!user) {
       logger.warn('User not found', { email });
       return res.status(404).json({ message: 'User not found' });
+    }
+    if(user.isVerified == 0){
+      return res.status(401).json({ message: 'User not verified' });
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
