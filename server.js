@@ -231,7 +231,7 @@ const authenticate = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
     if(user.isVerified == 0){
-      return res.status(401).json({ message: 'User not verified' });
+      return res.status(403).json({ message: 'User not verified' });
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
