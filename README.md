@@ -48,6 +48,15 @@ the application will run on ubuntu server by digital ocean
 testing is done by using chai, moka framework and supertest which tests all potential test cases 
 
 
+command to fetch certificate 
+
+aws acm import-certificate \
+    --certificate file:///Users/vardhankaranam/.ssh/demo_vardhan_click/demo_vardhan_click.crt \
+    --private-key file:///Users/vardhankaranam/.ssh/private.key \
+    --certificate-chain file:///Users/vardhankaranam/.ssh/demo_vardhan_click/demo_vardhan_click.ca-bundle \
+    --region us-east-1
+
+
 
 
 
