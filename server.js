@@ -288,6 +288,37 @@ app.get('/healthz', async (req, res) => {
     return res.status(503).end();
   }
 });
+app.get('/cicd', async (req, res) => {
+  const dbStartTime = process.hrtime();
+  try {
+    if (Object.keys(req.query).length > 0) {
+      logger.warn('Query parameters not allowed in health check');
+      return res.status(400).end();
+    }
+    if (req.get('Content-Length') && parseInt(req.get('Content-Length')) > 0) {
+      logger.warn('Content-Length not allowed in health check');
+      return res.status(400).end();
+    }
+
+    // Start timing the database authentication
+    const dbStartTime = process.hrtime();
+
+    await sequelize.authenticate();
+
+    // Measure DB authentication duration
+    const dbDiff = process.hrtime(dbStartTime);
+    const dbDurationInMs = (dbDiff[0] * 1e9 + dbDiff[1]) / 1e6;
+
+    // Send timing metric for DB authentication
+    statsdClient.timing('method.healthz_database_time', dbDurationInMs);
+
+    logger.info('Health check passed');
+    return res.status(200).end();
+  } catch (error) {
+    logger.error('Health check failed', { error: error.message });
+    return res.status(503).end();
+  }
+});
 
 
 // User routes
@@ -396,6 +427,7 @@ app.post('/v1/user', async (req, res) => {
       email: newUser.email,
       account_created: moment(newUser.account_created).tz('America/New_York').format(),
       account_updated: moment(newUser.account_updated).tz('America/New_York').format(),
+      token: token
     });
   } catch (error) {
     logger.error('Error creating user', { error: error.message });
